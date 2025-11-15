@@ -119,9 +119,6 @@ import (
 
 var timeNow = time.Now // Stubbed out for testing.
 
-// MaxSize is the maximum size of a log file in bytes.
-var MaxSize uint64 = 1024 * 1024 * 1800
-
 // ErrNoLog is the error we return if no log file has yet been created
 // for the specified log type.
 var ErrNoLog = errors.New("log file not yet created")
