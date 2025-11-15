@@ -548,8 +548,8 @@ func TestRollover(t *testing.T) {
 
 	// Set MaxSize to a value that will accept one longMessage, but not two.
 	longMessage := strings.Repeat("x", 1024)
-	defer func(previous uint64) { MaxSize = previous }(MaxSize)
-	MaxSize = uint64(fi.Size()) + uint64(2*len(longMessage)) - 1
+	defer func(previous uint64) { maxLogSize = previous }(maxLogSize)
+	maxLogSize = uint64(fi.Size()) + uint64(2*len(longMessage)) - 1
 
 	fname0 := info.file.Name()
 
@@ -564,7 +564,7 @@ func TestRollover(t *testing.T) {
 	if fname0 == fname1 {
 		t.Errorf("info.f.Name did not change: %v", fname0)
 	}
-	if info.nbytes >= MaxSize {
+	if info.nbytes >= maxLogSize {
 		t.Errorf("file size was not reset: %d", info.nbytes)
 	}
 

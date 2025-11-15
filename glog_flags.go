@@ -367,6 +367,8 @@ var (
 	alsoToStderr bool // The -alsologtostderr flag.
 
 	stderrThreshold severityFlag // The -stderrthreshold flag.
+
+	maxLogSize uint64
 )
 
 // verboseEnabled returns whether the caller at the given depth should emit
@@ -395,4 +397,5 @@ func init() {
 	flag.BoolVar(&toStderr, "logtostderr", false, "log to standard error instead of files")
 	flag.BoolVar(&alsoToStderr, "alsologtostderr", false, "log to standard error as well as files")
 	flag.Var(&stderrThreshold, "stderrthreshold", "logs at or above this threshold go to stderr")
+	flag.Uint64Var(&maxLogSize, "maxlogsize", 1024*1024*5, "max log file size in bytes before rotation")
 }

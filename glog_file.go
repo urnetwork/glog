@@ -279,7 +279,7 @@ func (sb *syncBuffer) Sync() error {
 func (sb *syncBuffer) Write(p []byte) (n int, err error) {
 	// Rotate the file if it is too large, but ensure we only do so,
 	// if rotate doesn't create a conflicting filename.
-	if sb.nbytes+uint64(len(p)) >= MaxSize {
+	if sb.nbytes+uint64(len(p)) >= maxLogSize {
 		now := timeNow()
 		if now.After(sb.madeAt.Add(1*time.Second)) || now.Second() != sb.madeAt.Second() {
 			if err := sb.rotateFile(now); err != nil {
