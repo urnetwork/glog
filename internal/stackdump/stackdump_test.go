@@ -10,7 +10,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/golang/glog/internal/stackdump"
+	"github.com/urnetwork/glog/internal/stackdump"
 )
 
 var file string
@@ -26,7 +26,7 @@ func TestCallerText(t *testing.T) {
 
 	wantRE := regexp.MustCompile(fmt.Sprintf(
 		`^goroutine \d+ \[running\]:
-github.com/golang/glog/internal/stackdump_test\.TestCallerText(\([^)]*\))?
+github.com/urnetwork/glog/internal/stackdump_test\.TestCallerText(\([^)]*\))?
 	%v:%v.*
 `, file, line))
 	if !wantRE.Match(stack) {
@@ -69,13 +69,13 @@ func TestCallerTextSkip(t *testing.T) {
 			fmt.Fprintf(wantREBuf, "\n|$")
 		} else {
 			for n := tc.callerAtFrames; n > 0; n-- {
-				fmt.Fprintf(wantREBuf, `github.com/golang/glog/internal/stackdump_test\.callerAt(\([^)]*\))?
+				fmt.Fprintf(wantREBuf, `github.com/urnetwork/glog/internal/stackdump_test\.callerAt(\([^)]*\))?
 	%v:\d+.*
 `, file)
 			}
 
 			if tc.depth <= calls {
-				fmt.Fprintf(wantREBuf, `github.com/golang/glog/internal/stackdump_test\.TestCallerTextSkip(\([^)]*\))?
+				fmt.Fprintf(wantREBuf, `github.com/urnetwork/glog/internal/stackdump_test\.TestCallerTextSkip(\([^)]*\))?
 	%v:\d+.*
 `, file)
 			}
@@ -123,10 +123,10 @@ func TestCallerPC(t *testing.T) {
 
 		wantFuncs := []string{}
 		for n := tc.pcAtFrames; n > 0; n-- {
-			wantFuncs = append(wantFuncs, `github.com/golang/glog/internal/stackdump_test\.pcAt$`)
+			wantFuncs = append(wantFuncs, `github.com/urnetwork/glog/internal/stackdump_test\.pcAt$`)
 		}
 		if tc.depth <= calls {
-			wantFuncs = append(wantFuncs, `^github.com/golang/glog/internal/stackdump_test\.TestCallerPC$`)
+			wantFuncs = append(wantFuncs, `^github.com/urnetwork/glog/internal/stackdump_test\.TestCallerPC$`)
 		}
 
 		gotFuncs := []string{}

@@ -28,7 +28,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/golang/glog/internal/logsink"
+	"github.com/urnetwork/glog/internal/logsink"
 )
 
 // modulePat contains a filter for the -vmodule flag.
