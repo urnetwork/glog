@@ -28,7 +28,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/urnetwork/glog/internal/logsink"
+	"github.com/golang/glog/internal/logsink"
 )
 
 // modulePat contains a filter for the -vmodule flag.
@@ -368,7 +368,7 @@ var (
 
 	stderrThreshold severityFlag // The -stderrthreshold flag.
 
-	maxLogSize uint64
+	// maxLogSize uint64
 )
 
 // verboseEnabled returns whether the caller at the given depth should emit
@@ -397,5 +397,5 @@ func init() {
 	flag.BoolVar(&toStderr, "logtostderr", false, "log to standard error instead of files")
 	flag.BoolVar(&alsoToStderr, "alsologtostderr", false, "log to standard error as well as files")
 	flag.Var(&stderrThreshold, "stderrthreshold", "logs at or above this threshold go to stderr")
-	flag.Uint64Var(&maxLogSize, "maxlogsize", 1024*1024*5, "max log file size in bytes before rotation")
+	// flag.Uint64Var(&maxLogSize, "max_log_size", 1024*1024*5, "max log file size in bytes before rotation")
 }

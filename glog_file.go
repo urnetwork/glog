@@ -32,7 +32,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/urnetwork/glog/internal/logsink"
+	"github.com/golang/glog/internal/logsink"
 )
 
 // logDirs lists the candidate directories for new log files.
@@ -45,6 +45,7 @@ var (
 	logLink     = flag.String("log_link", "", "If non-empty, add symbolic links in this directory to the log files")
 	logBufLevel = flag.Int("logbuflevel", int(logsink.Info), "Buffer log messages logged at this level or lower"+
 		" (-1 means don't buffer; 0 means buffer INFO only; ...). Has limited applicability on non-prod platforms.")
+	maxLogSize = flag.Uint64("max_log_size", 1024*1024*16, "max log file size in bytes before rotation")
 )
 
 func createLogDirs() {
@@ -279,7 +280,7 @@ func (sb *syncBuffer) Sync() error {
 func (sb *syncBuffer) Write(p []byte) (n int, err error) {
 	// Rotate the file if it is too large, but ensure we only do so,
 	// if rotate doesn't create a conflicting filename.
-	if sb.nbytes+uint64(len(p)) >= maxLogSize {
+	if sb.nbytes+uint64(len(p)) >= *maxLogSize {
 		now := timeNow()
 		if now.After(sb.madeAt.Add(1*time.Second)) || now.Second() != sb.madeAt.Second() {
 			if err := sb.rotateFile(now); err != nil {
