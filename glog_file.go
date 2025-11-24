@@ -448,3 +448,48 @@ func Names(s string) ([]string, error) {
 
 	return f.filenames(), nil
 }
+
+// SetLogDir changes the directory used for subsequent log files.
+// Existing open log files are flushed and closed; new files will be
+// created in the provided directory (with the system temp dir as a fallback).
+// It does not delete or move existing log files.
+//
+// Calling this before any logging is equivalent to setting --log_dir.
+// Calling it after logging has begun will start new log chains in the new location.
+func SetLogDir(dir string) error {
+	if dir == "" {
+		return errors.New("SetLogDir: empty directory")
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(abs, 0o755); err != nil {
+		return err
+	}
+
+	// Update the flag-backed variable so any code reading *logDir sees the new value.
+	// (Ignoring the error; if the flag wasn't defined through the default FlagSet, we still set *logDir directly.)
+	_ = flag.CommandLine.Set("log_dir", abs)
+	*logDir = abs
+
+	// Lock file sink, flush & close existing severity writers.
+	sinks.file.mu.Lock()
+	defer sinks.file.mu.Unlock()
+
+	for sev := logsink.Info; sev <= logsink.Fatal; sev++ {
+		if w := sinks.file.file[sev]; w != nil {
+			if sb, ok := w.(*syncBuffer); ok && sb.file != nil {
+				// Best effort flush; ignore errors here (could also surface them).
+				_ = sb.Flush()
+				_ = sb.file.Close()
+			}
+			sinks.file.file[sev] = nil
+		}
+	}
+
+	// Replace candidate directories. Keep temp dir as fallback.
+	logDirs = []string{abs, os.TempDir()}
+
+	return nil
+}
