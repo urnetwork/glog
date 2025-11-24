@@ -28,7 +28,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/golang/glog/internal/logsink"
+	"github.com/urnetwork/glog/internal/logsink"
 )
 
 // modulePat contains a filter for the -vmodule flag.
@@ -94,7 +94,7 @@ type verboseFlags struct {
 }
 
 // NOTE: For compatibility with the open-sourced v1 version of this
-// package (github.com/golang/glog) we need to retain that flag.Level
+// package (github.com/urnetwork/glog) we need to retain that flag.Level
 // implements the flag.Value interface. See also go/log-vs-glog.
 
 // String is part of the flag.Value interface.

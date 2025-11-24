@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/glog/internal/stackdump"
+	"github.com/urnetwork/glog/internal/stackdump"
 )
 
 // MaxLogMessageLen is the limit on length of a formatted log message, including

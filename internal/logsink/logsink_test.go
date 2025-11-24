@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/glog/internal/logsink"
-	"github.com/golang/glog/internal/stackdump"
+	"github.com/urnetwork/glog/internal/logsink"
+	"github.com/urnetwork/glog/internal/stackdump"
 	"github.com/google/go-cmp/cmp"
 )
 
