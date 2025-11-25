@@ -493,3 +493,7 @@ func SetLogDir(dir string) error {
 
 	return nil
 }
+
+func SetMaxLogSize(size uint64) {
+	*maxLogSize = size
+}
