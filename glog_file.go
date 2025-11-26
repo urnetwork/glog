@@ -52,7 +52,8 @@ func createLogDirs() {
 	if *logDir != "" {
 		logDirs = append(logDirs, *logDir)
 	}
-	logDirs = append(logDirs, os.TempDir())
+	// logDirs = append(logDirs, os.TempDir())
+	logDirs = append(logDirs)
 }
 
 var (
@@ -183,7 +184,7 @@ func init() {
 	if shouldRegisterStderrSink() {
 		logsink.TextSinks = append(logsink.TextSinks, &sinks.stderr)
 	}
-	logsink.TextSinks = append(logsink.TextSinks, &sinks.file)
+	// logsink.TextSinks = append(logsink.TextSinks, &sinks.file)
 
 	sinks.file.flushChan = make(chan logsink.Severity, 1)
 	go sinks.file.flushDaemon()
@@ -489,7 +490,10 @@ func SetLogDir(dir string) error {
 	}
 
 	// Replace candidate directories. Keep temp dir as fallback.
-	logDirs = []string{abs, os.TempDir()}
+	// logDirs = []string{abs, os.TempDir()}
+	logDirs = []string{abs}
+
+	logsink.TextSinks = append(logsink.TextSinks, &sinks.file)
 
 	return nil
 }
