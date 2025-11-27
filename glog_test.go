@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/urnetwork/glog/internal/logsink"
+	"github.com/urnetwork/glog/v2025/internal/logsink"
 )
 
 // Test that shortHostname works as advertised.
