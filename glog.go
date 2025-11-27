@@ -113,8 +113,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/urnetwork/glog/internal/logsink"
-	"github.com/urnetwork/glog/internal/stackdump"
+	"github.com/urnetwork/glog/v2025/internal/logsink"
+	"github.com/urnetwork/glog/v2025/internal/stackdump"
 )
 
 var timeNow = time.Now // Stubbed out for testing.
