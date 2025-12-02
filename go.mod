@@ -1,4 +1,4 @@
-module github.com/urnetwork/glog
+module github.com/urnetwork/glog/v2025
 
 go 1.19
 
