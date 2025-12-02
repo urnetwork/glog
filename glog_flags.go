@@ -28,7 +28,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/urnetwork/glog/internal/logsink"
+	"github.com/urnetwork/glog/v2025/internal/logsink"
 )
 
 // modulePat contains a filter for the -vmodule flag.
