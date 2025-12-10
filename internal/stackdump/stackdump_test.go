@@ -10,7 +10,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/urnetwork/glog/internal/stackdump"
+	"github.com/urnetwork/glog/v2025/internal/stackdump"
 )
 
 var file string
