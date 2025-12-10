@@ -5,7 +5,7 @@ import (
 	"flag"
 	"testing"
 
-	"github.com/urnetwork/glog/internal/logsink"
+	"github.com/urnetwork/glog/v2025/internal/logsink"
 )
 
 type contextKey string
