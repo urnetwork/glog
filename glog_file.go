@@ -32,7 +32,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/urnetwork/glog/internal/logsink"
+	"github.com/urnetwork/glog/v2025/internal/logsink"
 )
 
 // logDirs lists the candidate directories for new log files.
