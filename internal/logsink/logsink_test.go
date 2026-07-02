@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/urnetwork/glog/internal/logsink"
-	"github.com/urnetwork/glog/internal/stackdump"
+	"github.com/urnetwork/glog/v2026/internal/logsink"
+	"github.com/urnetwork/glog/v2026/internal/stackdump"
 	"github.com/google/go-cmp/cmp"
 )
 
