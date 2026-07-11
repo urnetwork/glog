@@ -36,8 +36,11 @@ type flushBuffer struct {
 	bytes.Buffer
 }
 
+// Flush is a no-op: a real flush pushes buffered bytes to the OS without
+// discarding anything, and the flush daemon runs concurrently with tests,
+// so mutating the buffer here would race with (and wipe) the contents the
+// tests read. Tests clear buffers explicitly with resetBuffers.
 func (f *flushBuffer) Flush() error {
-	f.Buffer.Reset()
 	return nil
 }
 
@@ -69,14 +72,16 @@ func (s *fileSink) resetBuffers() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, buf := range s.file {
-		if buf != nil {
-			buf.Flush()
+		if fb, ok := buf.(*flushBuffer); ok {
+			fb.Reset()
 		}
 	}
 }
 
 // contents returns the specified log value as a string.
 func contents(s logsink.Severity) string {
+	sinks.file.mu.Lock()
+	defer sinks.file.mu.Unlock()
 	return sinks.file.file[s].(*flushBuffer).String()
 }
 
@@ -85,9 +90,11 @@ func contains(s logsink.Severity, str string, t *testing.T) bool {
 	return strings.Contains(contents(s), str)
 }
 
-// setFlags configures the logging flags how the test expects them.
+// setFlags configures the logging flags and file sink how the test expects
+// them: file-style logging active (the tests then swap in fake writers).
 func setFlags() {
 	toStderr = false
+	sinks.file.dirSet.Store(true)
 }
 
 // Test that Info works as advertised.
@@ -521,6 +528,11 @@ func logAtVariousLevels() {
 
 func TestRollover(t *testing.T) {
 	setFlags()
+	dir := t.TempDir()
+	resetFileSink(t)
+	if err := SetLogDir(dir); err != nil {
+		t.Fatal(err)
+	}
 	defer func(previous func() time.Time) { timeNow = previous }(timeNow)
 
 	// Initialize a fake clock that can be advanced with the tick func.
@@ -548,9 +560,8 @@ func TestRollover(t *testing.T) {
 
 	// Set MaxSize to a value that will accept one longMessage, but not two.
 	longMessage := strings.Repeat("x", 1024)
-	defer func(previous uint64) { maxLogSize = &previous }(*maxLogSize)
-	newSize := uint64(fi.Size()) + uint64(2*len(longMessage)) - 1
-	maxLogSize = &newSize
+	defer func(previous uint64) { maxLogSize.Store(previous) }(maxLogSize.Load())
+	maxLogSize.Store(uint64(fi.Size()) + uint64(2*len(longMessage)) - 1)
 
 	fname0 := info.file.Name()
 
@@ -565,7 +576,7 @@ func TestRollover(t *testing.T) {
 	if fname0 == fname1 {
 		t.Errorf("info.f.Name did not change: %v", fname0)
 	}
-	if info.nbytes >= *maxLogSize {
+	if info.nbytes >= maxLogSize.Load() {
 		t.Errorf("file size was not reset: %d", info.nbytes)
 	}
 

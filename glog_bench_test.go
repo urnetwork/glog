@@ -46,6 +46,7 @@ func discardStderr() func() {
 const message = "benchmark log message"
 
 func benchmarkLog(b *testing.B, log func(...any)) {
+	sinks.file.dirSet.Store(true)
 	defer sinks.file.swap(sinks.file.newDiscarders())
 	defer discardStderr()()
 	b.ResetTimer()
@@ -56,6 +57,7 @@ func benchmarkLog(b *testing.B, log func(...any)) {
 }
 
 func benchmarkLogConcurrent(b *testing.B, log func(...any)) {
+	sinks.file.dirSet.Store(true)
 	defer sinks.file.swap(sinks.file.newDiscarders())
 	defer discardStderr()()
 	b.ResetTimer()

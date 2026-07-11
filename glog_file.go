@@ -28,8 +28,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/urnetwork/glog/internal/logsink"
@@ -45,15 +47,40 @@ var (
 	logLink     = flag.String("log_link", "", "If non-empty, add symbolic links in this directory to the log files")
 	logBufLevel = flag.Int("logbuflevel", int(logsink.Info), "Buffer log messages logged at this level or lower"+
 		" (-1 means don't buffer; 0 means buffer INFO only; ...). Has limited applicability on non-prod platforms.")
-	maxLogSize = flag.Uint64("max_log_size", 1024*1024*16, "max log file size in bytes before rotation")
+
+	// maxLogSize is the maximum size of a log file in bytes before rotation.
+	// It is read on every log file write, so it is accessed atomically; change
+	// it with SetMaxLogSize or the --max_log_size flag (registered in init).
+	maxLogSize sizeFlag
 )
 
+// sizeFlag is an atomic uint64 that implements flag.Value, so that it can be
+// changed safely while other goroutines are writing log entries.
+type sizeFlag struct{ atomic.Uint64 }
+
+// String is part of the flag.Value interface.
+func (s *sizeFlag) String() string { return strconv.FormatUint(s.Load(), 10) }
+
+// Get is part of the flag.Getter interface.
+func (s *sizeFlag) Get() any { return s.Load() }
+
+// Set is part of the flag.Value interface.
+func (s *sizeFlag) Set(value string) error {
+	v, err := strconv.ParseUint(value, 10, 64)
+	if err != nil {
+		return err
+	}
+	s.Store(v)
+	return nil
+}
+
+// createLogDirs initializes logDirs from the --log_dir flag. Unlike upstream
+// glog there is no os.TempDir() fallback: this package writes no log files
+// unless a directory is configured with SetLogDir or --log_dir.
 func createLogDirs() {
 	if *logDir != "" {
 		logDirs = append(logDirs, *logDir)
 	}
-	// logDirs = append(logDirs, os.TempDir())
-	logDirs = append(logDirs)
 }
 
 var (
@@ -179,12 +206,20 @@ var sinks struct {
 }
 
 func init() {
+	maxLogSize.Store(1024 * 1024 * 16)
+	flag.Var(&maxLogSize, "max_log_size", "max log file size in bytes before rotation")
+
 	// Register stderr first: that way if we crash during file-writing at least
 	// the log will have gone somewhere.
 	if shouldRegisterStderrSink() {
 		logsink.TextSinks = append(logsink.TextSinks, &sinks.stderr)
 	}
-	// logsink.TextSinks = append(logsink.TextSinks, &sinks.file)
+	// The file sink is registered here, during package init, because
+	// logsink.TextSinks must not be modified once logging may have started
+	// (it is read without synchronization on every log call). Whether the
+	// sink actually writes files is controlled by fileSink.Enabled, which
+	// stays false until a log directory is configured.
+	logsink.TextSinks = append(logsink.TextSinks, &sinks.file)
 
 	sinks.file.flushChan = make(chan logsink.Severity, 1)
 	go sinks.file.flushDaemon()
@@ -224,29 +259,57 @@ type severityWriters [4]flushSyncWriter
 
 // fileSink is a logsink.Text that prints to a set of Google log files.
 type fileSink struct {
+	// dirSet is whether a log directory has been configured with SetLogDir.
+	// Until then (or until --log_dir is set) the sink is disabled and writes
+	// no files; this package intentionally has no default log directory.
+	dirSet atomic.Bool
+
 	mu sync.Mutex
 	// file holds writer for each of the log types.
 	file      severityWriters
 	flushChan chan logsink.Severity
+	// errReported is whether the current run of file-write failures has been
+	// reported to stderr already. It is reset when a log file is created
+	// successfully, so each new failure episode is reported once.
+	// Guarded by mu.
+	errReported bool
 }
 
-// Enabled implements logsink.Text.Enabled.  It returns true if google.Init
-// has run and both --disable_log_to_disk and --logtostderr are false.
+// Enabled implements logsink.Text.Enabled.  It returns true if --logtostderr
+// is false and a log directory has been configured, either with SetLogDir or
+// with the --log_dir flag.
 func (s *fileSink) Enabled(m *logsink.Meta) bool {
-	return !toStderr
+	return !toStderr && (s.dirSet.Load() || *logDir != "")
 }
 
-// Emit implements logsink.Text.Emit
+// Emit implements logsink.Text.Emit.
+//
+// Failures to create or write log files are reported to stderr and the entry
+// is dropped from the file log, but no error is returned: per the
+// logsink.Text contract a returned error terminates the hosting process, and
+// an unwritable log directory or a full disk must not take the app down with
+// it. File creation is retried on the next Emit, so file logging resumes by
+// itself if the directory becomes writable again.
 func (s *fileSink) Emit(m *logsink.Meta, data []byte) (n int, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if err = s.createMissingFiles(m.Severity); err != nil {
-		return 0, err
+	if cErr := s.createMissingFiles(m.Severity); cErr != nil {
+		s.reportErrLocked(cErr)
+		// Fall through and write to whichever files do exist.
 	}
 	for sev := m.Severity; sev >= logsink.Info; sev-- {
-		if _, fErr := s.file[sev].Write(data); fErr != nil && err == nil {
-			err = fErr // Take the first error.
+		w := s.file[sev]
+		if w == nil {
+			continue
+		}
+		if _, fErr := w.Write(data); fErr != nil {
+			s.reportErrLocked(fErr)
+			// Drop the broken writer; the next Emit re-creates the file.
+			if sb, ok := w.(*syncBuffer); ok && sb.file != nil {
+				sb.file.Close()
+			}
+			s.file[sev] = nil
 		}
 	}
 	n = len(data)
@@ -257,7 +320,18 @@ func (s *fileSink) Emit(m *logsink.Meta, data []byte) (n int, err error) {
 		}
 	}
 
-	return n, err
+	return n, nil
+}
+
+// reportErrLocked reports a failure to write log files to stderr, at most
+// once per run of failures so a persistently broken log directory does not
+// flood stderr. s.mu is held.
+func (s *fileSink) reportErrLocked(err error) {
+	if s.errReported {
+		return
+	}
+	s.errReported = true
+	fmt.Fprintf(os.Stderr, "log: cannot write log files (dropping entries until recovered): %v\n", err)
 }
 
 // syncBuffer joins a bufio.Writer to its underlying file, providing access to the
@@ -281,7 +355,7 @@ func (sb *syncBuffer) Sync() error {
 func (sb *syncBuffer) Write(p []byte) (n int, err error) {
 	// Rotate the file if it is too large, but ensure we only do so,
 	// if rotate doesn't create a conflicting filename.
-	if sb.nbytes+uint64(len(p)) >= *maxLogSize {
+	if sb.nbytes+uint64(len(p)) >= maxLogSize.Load() {
 		now := timeNow()
 		if now.After(sb.madeAt.Add(1*time.Second)) || now.Second() != sb.madeAt.Second() {
 			if err := sb.rotateFile(now); err != nil {
@@ -352,12 +426,11 @@ const bufferSize = 256 * 1024
 // upTo that have not already been created.
 // s.mu is held.
 func (s *fileSink) createMissingFiles(upTo logsink.Severity) error {
-	if s.file[upTo] != nil {
-		return nil
-	}
+	// Check every severity rather than only upTo: unlike upstream glog,
+	// individual writers can be dropped after a write failure, so a
+	// higher-severity file existing no longer implies the lower ones do.
 	now := time.Now()
-	// Files are created in increasing severity order, so we can be assured that
-	// if a high severity logfile exists, then so do all of lower severity.
+	created := false
 	for sev := logsink.Info; sev <= upTo; sev++ {
 		if s.file[sev] != nil {
 			continue
@@ -370,6 +443,11 @@ func (s *fileSink) createMissingFiles(upTo logsink.Severity) error {
 			return err
 		}
 		s.file[sev] = sb
+		created = true
+	}
+	if created {
+		// A file was created successfully; report the next failure episode.
+		s.errReported = false
 	}
 	return nil
 }
@@ -407,9 +485,12 @@ func (s *fileSink) flush(threshold logsink.Severity) error {
 		}
 	}
 
-	// Remember where we flushed, so we can call sync without holding
-	// the lock.
-	var files []flushSyncWriter
+	// Remember what to sync, so we can call sync without holding the lock.
+	// For syncBuffers, snapshot the underlying *os.File while locked:
+	// rotation or SetLogDir can swap or close sb.file concurrently, and
+	// reading the field outside the lock would race. Sync on a
+	// concurrently-closed handle just returns an error, which we tolerate.
+	var syncs []func() error
 	func() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -417,13 +498,17 @@ func (s *fileSink) flush(threshold logsink.Severity) error {
 		for sev := logsink.Fatal; sev >= threshold; sev-- {
 			if file := s.file[sev]; file != nil {
 				updateErr(file.Flush())
-				files = append(files, file)
+				if sb, ok := file.(*syncBuffer); ok {
+					syncs = append(syncs, sb.file.Sync)
+				} else {
+					syncs = append(syncs, file.Sync)
+				}
 			}
 		}
 	}()
 
-	for _, file := range files {
-		updateErr(file.Sync())
+	for _, sync := range syncs {
+		updateErr(sync())
 	}
 
 	return firstErr
@@ -450,16 +535,20 @@ func Names(s string) ([]string, error) {
 	return f.filenames(), nil
 }
 
-// SetLogDir changes the directory used for subsequent log files.
-// Existing open log files are flushed and closed; new files will be
-// created in the provided directory (with the system temp dir as a fallback).
-// It does not delete or move existing log files.
+// SetLogDir enables file logging and sets the directory used for subsequent
+// log files, creating the directory if needed. Open log files are flushed
+// and closed; new files are created in dir on the next log write. Existing
+// log files are never deleted or moved.
 //
-// Calling this before any logging is equivalent to setting --log_dir.
-// Calling it after logging has begun will start new log chains in the new location.
+// This package writes no log files until SetLogDir is called or --log_dir is
+// set; there is no default (temp dir) destination. SetLogDir is safe to call
+// concurrently with logging. If the directory later becomes unwritable (for
+// example it is deleted, or the disk fills up), entries are dropped from the
+// file log and the failure is reported once to stderr; the process is not
+// terminated, and file logging resumes if the directory recovers.
 func SetLogDir(dir string) error {
 	if dir == "" {
-		return errors.New("SetLogDir: empty directory")
+		return errors.New("log: SetLogDir: empty directory")
 	}
 	abs, err := filepath.Abs(dir)
 	if err != nil {
@@ -469,35 +558,37 @@ func SetLogDir(dir string) error {
 		return err
 	}
 
-	// Update the flag-backed variable so any code reading *logDir sees the new value.
-	// (Ignoring the error; if the flag wasn't defined through the default FlagSet, we still set *logDir directly.)
-	_ = flag.CommandLine.Set("log_dir", abs)
-	*logDir = abs
+	s := &sinks.file
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	// Lock file sink, flush & close existing severity writers.
-	sinks.file.mu.Lock()
-	defer sinks.file.mu.Unlock()
-
+	// Flush and close the current log files so that new ones are created in
+	// the new directory on the next write.
 	for sev := logsink.Info; sev <= logsink.Fatal; sev++ {
-		if w := sinks.file.file[sev]; w != nil {
+		if w := s.file[sev]; w != nil {
 			if sb, ok := w.(*syncBuffer); ok && sb.file != nil {
-				// Best effort flush; ignore errors here (could also surface them).
+				// Best effort; the old files keep whatever made it to disk.
 				_ = sb.Flush()
+				_ = sb.file.Sync()
 				_ = sb.file.Close()
 			}
-			sinks.file.file[sev] = nil
+			s.file[sev] = nil
 		}
 	}
 
-	// Replace candidate directories. Keep temp dir as fallback.
-	// logDirs = []string{abs, os.TempDir()}
+	// Replace the candidate directories with dir alone. Settle the
+	// flag-derived list first so that a later create() cannot re-append
+	// --log_dir's value behind our back.
+	onceLogDirs.Do(createLogDirs)
 	logDirs = []string{abs}
 
-	logsink.TextSinks = append(logsink.TextSinks, &sinks.file)
-
+	s.dirSet.Store(true)
 	return nil
 }
 
+// SetMaxLogSize sets the maximum size in bytes a log file may grow to before
+// it is rotated. It is equivalent to the --max_log_size flag and is safe to
+// call concurrently with logging.
 func SetMaxLogSize(size uint64) {
-	*maxLogSize = size
+	maxLogSize.Store(size)
 }

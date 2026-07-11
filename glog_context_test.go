@@ -27,6 +27,9 @@ func (s *fakeLogSink) Printf(meta *logsink.Meta, format string, args ...any) (in
 func TestLogContext(t *testing.T) {
 	fakeLogSink := &fakeLogSink{}
 	logsink.StructuredSinks = append([]logsink.Structured{fakeLogSink}, originalSinks...)
+	// Unregister the fake sink when done: it is not safe for concurrent use,
+	// and leaving it registered would leak it into every later test.
+	t.Cleanup(func() { logsink.StructuredSinks = originalSinks })
 
 	funcs := map[string]func(ctx context.Context, args ...any){
 		"InfoContext":      InfoContext,
@@ -49,6 +52,7 @@ func TestLogContext(t *testing.T) {
 func TestVInfoContext(t *testing.T) {
 	fakeLogSink := &fakeLogSink{}
 	logsink.StructuredSinks = append([]logsink.Structured{fakeLogSink}, originalSinks...)
+	t.Cleanup(func() { logsink.StructuredSinks = originalSinks })
 	if err := flag.Lookup("v").Value.Set("2"); err != nil {
 		t.Fatalf("Failed to set -v=2: %v", err)
 	}
