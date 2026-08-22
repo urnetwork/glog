@@ -1,0 +1,39 @@
+name: Test — glog
+
+# glog's default branch is master, not main. Every other urnetwork repo's
+# workflow names main here; this one would silently never trigger if it did.
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: go test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out glog
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      # glog is the leaf of the urnetwork Go graph: no `replace ../` directives
+      # and no urnetwork requires, so unlike sdk/connect/server/proxy this needs
+      # no sibling checkouts. A lone checkout builds.
+      - name: Build
+        run: go build ./...
+
+      # -count=1 defeats the test result cache so a green run always means the
+      # tests actually ran. The suite is hermetic and finishes in seconds.
+      - name: Test
+        run: go test -count=1 -timeout 10m ./...
