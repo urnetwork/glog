@@ -1,7 +1,11 @@
-name: Test — glog
+name: Build and test — glog
 
 # glog's default branch is master, not main. Every other urnetwork repo's
 # workflow names main here; this one would silently never trigger if it did.
+#
+# The ~30 v2025.*/v2026.* release branches are deliberately not covered: they
+# are pipeline tags-as-branches, not places work happens. server/test.yml is the
+# precedent to copy (bare `on: push:`, every branch) if that ever changes.
 on:
   push:
     branches:
@@ -14,10 +18,19 @@ on:
 permissions:
   contents: read
 
+# One run per branch. A rapid series of pushes cancels its own stale runs
+# instead of queueing them.
+concurrency:
+  group: build-and-test-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
-    name: go test
+    name: go build and test
     runs-on: ubuntu-latest
+    # The suite finishes in well under a second; 10 is a stuck-job backstop,
+    # not a budget.
+    timeout-minutes: 10
     steps:
       - name: Check out glog
         uses: actions/checkout@v4
@@ -25,6 +38,9 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
+          # `stable` matches sdk/test.yml and connect/test.yml. go.mod declares
+          # go 1.24 as the floor; glog is consumed by connect and sdk, which
+          # build on stable, so testing there is the version that matters.
           go-version: stable
 
       # glog is the leaf of the urnetwork Go graph: no `replace ../` directives
@@ -33,7 +49,9 @@ jobs:
       - name: Build
         run: go build ./...
 
-      # -count=1 defeats the test result cache so a green run always means the
-      # tests actually ran. The suite is hermetic and finishes in seconds.
+      # Real tests, not a compile check: glog, internal/logsink and
+      # internal/stackdump all have suites, and they are hermetic (no network,
+      # no services, no credentials). -count=1 defeats the test result cache so
+      # a green run always means the tests actually ran.
       - name: Test
         run: go test -count=1 -timeout 10m ./...
