@@ -1,0 +1,68 @@
+name: Build and test — glog
+
+# glog's default branch is master, not main. Every other urnetwork repo's
+# workflow names main here; this one would silently never trigger if it did.
+#
+# The ~30 v2025.*/v2026.* release branches are deliberately not covered: they
+# are pipeline tags-as-branches, not places work happens. server/test.yml is the
+# precedent to copy (bare `on: push:`, every branch) if that ever changes.
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One run per branch. A rapid series of pushes cancels its own stale runs
+# instead of queueing them.
+concurrency:
+  group: build-and-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: go build and test
+    runs-on: ubuntu-latest
+    # The suite finishes in well under a second; 10 is a stuck-job backstop,
+    # not a budget.
+    timeout-minutes: 10
+    steps:
+      - name: Check out glog
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          # `stable` matches sdk/test.yml and connect/test.yml. go.mod declares
+          # go 1.24 as the floor; glog is consumed by connect and sdk, which
+          # build on stable, so testing there is the version that matters.
+          go-version: stable
+
+      # glog is the leaf of the urnetwork Go graph: no `replace ../` directives
+      # and no urnetwork requires, so unlike sdk/connect/server/proxy this needs
+      # no sibling checkouts. A lone checkout builds.
+      - name: Build
+        run: go build ./...
+
+      # Real tests, not a compile check: glog, internal/logsink and
+      # internal/stackdump all have suites, and they are hermetic (no network,
+      # no services, no credentials). -count=1 defeats the test result cache so
+      # a green run always means the tests actually ran.
+      #
+      # Known pre-existing flake, roughly 1 run in 60 and nothing to do with
+      # CI: TestRollover fails when the real wall-clock second at which the
+      # first log file is created happens to be :46. createMissingFiles
+      # (glog_file.go:432) stamps syncBuffer.madeAt from time.Now(), while
+      # syncBuffer.Write's rotation guard compares it against the stubbable
+      # timeNow() -- and the test's fake clock rotates at :46, so once a
+      # minute the two agree and the first rotation is skipped. Re-run when it
+      # happens. The fix is one line in the library (`now := timeNow()`), and
+      # rotation is this repo's core feature, so the test gates rather than
+      # being quarantined the way connect/test.yml quarantines its extender.
+      - name: Test
+        run: go test -count=1 -timeout 10m ./...
