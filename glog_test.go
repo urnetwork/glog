@@ -537,7 +537,9 @@ func TestRollover(t *testing.T) {
 
 	// Initialize a fake clock that can be advanced with the tick func.
 	fakeNow := time.Date(2024, 12, 23, 1, 23, 45, 0, time.Local)
+	clockCalls := 0
 	timeNow = func() time.Time {
+		clockCalls++
 		return fakeNow
 	}
 
@@ -546,9 +548,17 @@ func TestRollover(t *testing.T) {
 	}
 
 	Info("x") // Be sure we have a file.
+	// Both the message and first file must use this clock. Checking calls also
+	// rejects the old real-clock path regardless of the wall-clock second.
+	if got, want := clockCalls, 2; got != want {
+		t.Fatalf("initial message and file used logging clock %d times, want %d", got, want)
+	}
 	info, ok := sinks.file.file[logsink.Info].(*syncBuffer)
 	if !ok {
 		t.Fatal("info wasn't created")
+	}
+	if !info.madeAt.Equal(fakeNow) {
+		t.Fatalf("initial file creation time = %v, want %v", info.madeAt, fakeNow)
 	}
 
 	// Measure the current size of the log file.

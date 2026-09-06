@@ -54,15 +54,9 @@ jobs:
       # no services, no credentials). -count=1 defeats the test result cache so
       # a green run always means the tests actually ran.
       #
-      # Known pre-existing flake, roughly 1 run in 60 and nothing to do with
-      # CI: TestRollover fails when the real wall-clock second at which the
-      # first log file is created happens to be :46. createMissingFiles
-      # (glog_file.go:432) stamps syncBuffer.madeAt from time.Now(), while
-      # syncBuffer.Write's rotation guard compares it against the stubbable
-      # timeNow() -- and the test's fake clock rotates at :46, so once a
-      # minute the two agree and the first rotation is skipped. Re-run when it
-      # happens. The fix is one line in the library (`now := timeNow()`), and
-      # rotation is this repo's core feature, so the test gates rather than
-      # being quarantined the way connect/test.yml quarantines its extender.
+      # File creation and rotation share the stubbable logging clock.
+      # TestRollover checks that boundary before its size/collision controls,
+      # so a real-clock regression fails deterministically rather than only
+      # when the wall-clock second happens to match the simulated second.
       - name: Test
         run: go test -count=1 -timeout 10m ./...

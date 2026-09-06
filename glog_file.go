@@ -240,7 +240,9 @@ func (s *stderrSink) Enabled(m *logsink.Meta) bool {
 	return toStderr || alsoToStderr || m.Severity >= stderrThreshold.get()
 }
 
-// Emit implements logsink.Text.Emit.
+// Emit implements logsink.Text.Emit. Console writes are best effort: an I/O
+// error must not request process termination. Other sinks and explicit
+// Fatal/Exit retain their contracts.
 func (s *stderrSink) Emit(m *logsink.Meta, data []byte) (n int, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -248,9 +250,8 @@ func (s *stderrSink) Emit(m *logsink.Meta, data []byte) (n int, err error) {
 	if w == nil {
 		w = os.Stderr
 	}
-	dn, err := w.Write(data)
-	n += dn
-	return n, err
+	n, _ = w.Write(data)
+	return n, nil
 }
 
 // severityWriters is an array of flushSyncWriter with a value for each
@@ -429,7 +430,7 @@ func (s *fileSink) createMissingFiles(upTo logsink.Severity) error {
 	// Check every severity rather than only upTo: unlike upstream glog,
 	// individual writers can be dropped after a write failure, so a
 	// higher-severity file existing no longer implies the lower ones do.
-	now := time.Now()
+	now := timeNow()
 	created := false
 	for sev := logsink.Info; sev <= upTo; sev++ {
 		if s.file[sev] != nil {
