@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/urnetwork/glog/internal/logsink"
-	"github.com/urnetwork/glog/internal/stackdump"
+	"github.com/urnetwork/glog/v2026/internal/logsink"
+	"github.com/urnetwork/glog/v2026/internal/stackdump"
 )
 
 // A savingTextSink saves the data argument of the last Emit call made to it.
