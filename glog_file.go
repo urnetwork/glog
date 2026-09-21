@@ -34,7 +34,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/urnetwork/glog/internal/logsink"
+	"github.com/urnetwork/glog/v2026/internal/logsink"
 )
 
 // logDirs lists the candidate directories for new log files.
