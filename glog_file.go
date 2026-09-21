@@ -404,7 +404,7 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 		return err
 	}
 
-	sb.Writer = bufio.NewWriterSize(sb.file, bufferSize)
+	sb.Writer = bufio.NewWriterSize(sb.file, logFileBufferSize(runtime.GOOS))
 
 	// Write header.
 	var buf bytes.Buffer
@@ -418,10 +418,23 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 	return err
 }
 
-// bufferSize sizes the buffer associated with each log file. It's large
+// bufferSize is the unchanged desktop/server per-file buffer. It is large
 // so that log records can accumulate without the logging thread blocking
 // on disk I/O. The flushDaemon will block instead.
 const bufferSize = 256 * 1024
+
+// Mobile clients have a much smaller process memory budget. An ERROR opens
+// three severity files, and their buffers remain live for the log session.
+// Keep those buffers to 96 KiB in total instead of 768 KiB; severity routing,
+// explicit/daemon flush policy, disk synchronization, and desktop/server
+// buffering do not change. Select from the immutable platform, not a setting
+// that could resize buffers or race with concurrent logging.
+func logFileBufferSize(goos string) int {
+	if goos == "android" || goos == "ios" {
+		return 32 * 1024
+	}
+	return bufferSize
+}
 
 // createMissingFiles creates all the log files for severity from infoLog up to
 // upTo that have not already been created.
