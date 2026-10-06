@@ -107,7 +107,6 @@ import (
 	"os"
 	"reflect"
 	"runtime"
-	"runtime/pprof"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -663,7 +662,7 @@ func flushAndAbort() {
 	// Failed to abort the process using signals.  Dump a stack trace and exit.
 	Errorf("abortProcess returned unexpectedly: %v", err)
 	sinks.file.Flush()
-	pprof.Lookup("goroutine").WriteTo(os.Stderr, 1)
+	dumpGoroutineStacks(os.Stderr)
 	os.Exit(2) // Exit with the same code as the default SIGABRT handler.
 }
 
