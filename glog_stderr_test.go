@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/urnetwork/glog/internal/logsink"
+	"github.com/urnetwork/glog/v2026/internal/logsink"
 )
 
 // Adapts controlled write outcomes to the existing console writer seam.
