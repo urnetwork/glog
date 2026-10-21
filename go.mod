@@ -1,6 +1,6 @@
 module github.com/urnetwork/glog
 
-go 1.24
+go 1.27.3
 
 require github.com/google/go-cmp v0.6.0
 
