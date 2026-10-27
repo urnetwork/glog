@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/urnetwork/glog/internal/logsink"
+	"github.com/urnetwork/glog/v2026/internal/logsink"
 )
 
 // resetFileSink registers a cleanup that closes any real log files and
