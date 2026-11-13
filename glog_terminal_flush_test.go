@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/urnetwork/glog/internal/logsink"
+	"github.com/urnetwork/glog/v2026/internal/logsink"
 )
 
 // A small info entry remains in the same userspace buffer that process exit loses.
